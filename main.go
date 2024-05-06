@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"embed"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -28,6 +29,9 @@ var (
 	notFound string
 	//go:embed schema.sql
 	schema string
+	//go:embed static/style.css
+	//go:embed static/favicon.svg
+	fs embed.FS
 )
 
 const (
@@ -280,7 +284,7 @@ func main() {
 	}
 
 	http.Handle("/", blog)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	http.Handle("/static/", http.FileServer(http.FS(fs)))
 
 	log.Printf("serving blog: port=%d, database=%s", *flags.port, *flags.database)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *flags.port), nil))
