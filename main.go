@@ -46,6 +46,7 @@ var (
 
 type blog struct {
 	sync.Mutex
+	address  string
 	index    *template.Template
 	post     *template.Template
 	notFound *template.Template
@@ -228,7 +229,7 @@ func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		b.handleIndex(w, r)
+		http.Redirect(w, r, b.address, http.StatusSeeOther)
 		return
 	}
 
@@ -272,9 +273,11 @@ func main() {
 	flags := struct {
 		port     *int
 		database *string
+		address  *string
 	}{
 		port:     flag.Int("port", 8000, "port to serve blog on"),
 		database: flag.String("database", ":memory:", "database to store posts in"),
+		address:  flag.String("root", "https://www.gthm.is", "public address of blog"),
 	}
 	flag.Parse()
 
