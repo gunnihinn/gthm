@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"embed"
 	_ "embed"
 	"flag"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,17 +22,8 @@ import (
 )
 
 var (
-	//go:embed index.html
-	index string
-	//go:embed post.html
-	post string
-	//go:embed 404.html
-	notFound string
 	//go:embed schema.sql
 	schema string
-	//go:embed static/style.css
-	//go:embed static/favicon.svg
-	fs embed.FS
 )
 
 const (
@@ -98,8 +90,12 @@ func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
 	return posts, nil
 }
 
-func readTemplate(content string, name string) (*template.Template, error) {
-	tmpl, err := template.New(name).Parse(content)
+func readTemplate(filename string, name string) (*template.Template, error) {
+	blob, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("error: Couldn't read %s: %s", filename, err)
+	}
+	tmpl, err := template.New(name).Parse(string(blob))
 	if err != nil {
 		return nil, fmt.Errorf("error: Couldn't parse template %s: %s", name, err)
 	}
@@ -111,17 +107,17 @@ func newBlog(database string) (*blog, error) {
 	blog := &blog{}
 	var err error
 
-	blog.index, err = readTemplate(index, "index")
+	blog.index, err = readTemplate("index.html", "index")
 	if err != nil {
 		return blog, err
 	}
 
-	blog.post, err = readTemplate(post, "post")
+	blog.post, err = readTemplate("post.html", "post")
 	if err != nil {
 		return blog, err
 	}
 
-	blog.notFound, err = readTemplate(notFound, "notFound")
+	blog.notFound, err = readTemplate("404.html", "notFound")
 	if err != nil {
 		return blog, err
 	}
@@ -274,10 +270,12 @@ func main() {
 		port     *int
 		database *string
 		address  *string
+		assets   *string
 	}{
 		port:     flag.Int("port", 8000, "port to serve blog on"),
 		database: flag.String("database", ":memory:", "database to store posts in"),
-		address:  flag.String("root", "https://www.gthm.is", "public address of blog"),
+		address:  flag.String("address", "https://www.gthm.is", "public address of blog"),
+		assets:   flag.String("assets", ".", "root directory of assets"),
 	}
 	flag.Parse()
 
@@ -287,8 +285,8 @@ func main() {
 	}
 
 	http.Handle("/", blog)
-	http.Handle("/static/", http.FileServer(http.FS(fs)))
+	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir(path.Join(*flags.assets, "static")))))
 
-	log.Printf("serving blog: port=%d, database=%s", *flags.port, *flags.database)
+	log.Printf("serving blog: port=%d, database=%s, asset-root=%s", *flags.port, *flags.database, *flags.assets)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *flags.port), nil))
 }

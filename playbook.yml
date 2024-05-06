@@ -40,6 +40,17 @@
         state: directory
         mode: '0755'
 
+    - name: Copy gthm assets
+      copy:
+        src: {{ item }}
+        dest: /var/gthm/
+      with_items:
+        - index.html
+        - post.html
+        - 404.html
+        - static
+      notify: Restart gthm
+
     - name: Start gthm service
       systemd:
         name: gthm

@@ -3,7 +3,7 @@ Description=gthm
 
 [Service]
 EnvironmentFile=/etc/gthm.env
-ExecStart=/usr/bin/gthm -database /var/gthm/blog.db
+ExecStart=/usr/bin/gthm -database /var/gthm/blog.db -assets /var/gthm
 Restart=always
 RestartSec=5
 
