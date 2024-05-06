@@ -35,9 +35,10 @@ var (
 
 type blog struct {
 	sync.Mutex
-	index *template.Template
-	post  *template.Template
-	db    *sql.DB
+	index    *template.Template
+	post     *template.Template
+	notFound *template.Template
+	db       *sql.DB
 }
 
 func (b *blog) addPost(ctx context.Context, title string, body string) error {
@@ -98,7 +99,7 @@ func readTemplate(filename string, name string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func newBlog(index string, post string, database string) (*blog, error) {
+func newBlog(index string, post string, notFound string, database string) (*blog, error) {
 	blog := &blog{}
 	var err error
 
@@ -108,6 +109,11 @@ func newBlog(index string, post string, database string) (*blog, error) {
 	}
 
 	blog.post, err = readTemplate(post, "post")
+	if err != nil {
+		return blog, err
+	}
+
+	blog.notFound, err = readTemplate(notFound, "notFound")
 	if err != nil {
 		return blog, err
 	}
@@ -124,6 +130,21 @@ func newBlog(index string, post string, database string) (*blog, error) {
 	return blog, nil
 }
 
+func (b *blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
+	var buf bytes.Buffer
+	if err := b.notFound.Execute(&buf, nil); err != nil {
+		log.Printf("error: Couldn't generate HTML: %s", err)
+		http.Error(w, fmt.Sprintf("Couldn't generate HTML"), http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := buf.WriteTo(w); err != nil {
+		log.Printf("error: Couldn't write HTML: %s", err)
+		http.Error(w, fmt.Sprintf("Couldn't write HTML"), http.StatusNotFound)
+		return
+	}
+}
+
 func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
@@ -135,13 +156,13 @@ func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.Atoi(strId[1])
 		if err != nil {
 			log.Printf("error: Couldn't parse integer from %s: %s", strId[1], err)
-			http.Error(w, "Unknown resource", http.StatusNotFound)
+			b.handleNotFound(w, r)
 			return
 		}
 		ids = append(ids, id)
 	} else {
 		log.Printf("error: Unknown URL %s", r.URL)
-		http.Error(w, "Unknown resource", http.StatusNotFound)
+		b.handleNotFound(w, r)
 		return
 	}
 
@@ -250,7 +271,7 @@ func main() {
 	}
 	flag.Parse()
 
-	blog, err := newBlog("index.html", "post.html", *flags.database)
+	blog, err := newBlog("index.html", "post.html", "404.html", *flags.database)
 	if err != nil {
 		log.Fatalf("error: Couldn't create blog: %s", err)
 	}
