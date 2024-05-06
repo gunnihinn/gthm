@@ -11,6 +11,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,16 @@ import (
 
 //go:embed schema.sql
 var schema string
+
+const (
+	sqlAllPosts = "SELECT id, created, title, body FROM posts ORDER BY id DESC"
+	sqlOnePost  = "SELECT id, created, title, body FROM posts WHERE id = ?"
+)
+
+var (
+	reRoot = regexp.MustCompile(`^/$`)
+	reId   = regexp.MustCompile(`^/([0-9]+)/?$`)
+)
 
 type blog struct {
 	sync.Mutex
@@ -36,6 +48,41 @@ func (b *blog) addPost(ctx context.Context, title string, body string) error {
 	}
 
 	return nil
+}
+
+func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
+	b.Lock()
+	defer b.Unlock()
+
+	rows, err := func(ids []int) (*sql.Rows, error) {
+		if len(ids) > 0 {
+			return b.db.QueryContext(ctx, sqlOnePost, ids[0])
+		} else {
+			return b.db.QueryContext(ctx, sqlAllPosts)
+		}
+	}(ids)
+	if err != nil {
+
+		return nil, fmt.Errorf("error: Couldn't get posts from database: %s", err)
+	}
+	defer rows.Close()
+
+	posts := make([]Post, 0)
+	for rows.Next() {
+		var post Post
+		var timestamp int64
+		var body string
+		if err := rows.Scan(&post.Id, &timestamp, &post.Title, &body); err != nil {
+			return nil, fmt.Errorf("error: Couldn't get post data from database: %s", err)
+		}
+		post.Created = time.Unix(timestamp, 0)
+		for _, paragraph := range strings.Split(body, "\n\n") {
+			post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
+		}
+		posts = append(posts, post)
+	}
+
+	return posts, nil
 }
 
 func readTemplate(filename string, name string) (*template.Template, error) {
@@ -80,39 +127,33 @@ func newBlog(index string, post string, database string) (*blog, error) {
 func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
-	b.Lock()
-	defer b.Unlock()
 
-	rows, err := b.db.QueryContext(ctx, "SELECT id, created, title, body FROM posts ORDER BY id DESC")
-	if err != nil {
-		log.Printf("error: Couldn't get posts from database: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't read posts"), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	data := struct {
-		Posts []Post
-	}{
-		Posts: make([]Post, 0),
-	}
-	for rows.Next() {
-		var post Post
-		var timestamp int64
-		var body string
-		if err := rows.Scan(&post.Id, &timestamp, &post.Title, &body); err != nil {
-			log.Printf("error: Couldn't get post data from database: %s", err)
-			http.Error(w, fmt.Sprintf("Couldn't read post"), http.StatusInternalServerError)
+	var ids []int
+	if reRoot.MatchString(r.URL.Path) {
+		// do nothing
+	} else if strId := reId.FindStringSubmatch(r.URL.Path); len(strId) == 2 {
+		id, err := strconv.Atoi(strId[1])
+		if err != nil {
+			log.Printf("error: Couldn't parse integer from %s: %s", strId[1], err)
+			http.Error(w, "Unknown resource", http.StatusNotFound)
 			return
 		}
-		post.Created = time.Unix(timestamp, 0)
-		for _, paragraph := range strings.Split(body, "\n\n") {
-			post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
-		}
-		data.Posts = append(data.Posts, post)
+		ids = append(ids, id)
+	} else {
+		log.Printf("error: Unknown URL %s", r.URL)
+		http.Error(w, "Unknown resource", http.StatusNotFound)
+		return
+	}
+
+	posts, err := b.getPosts(ctx, ids)
+	if err != nil {
+		log.Print(err)
+		http.Error(w, "Couldn't read posts", http.StatusInternalServerError)
+		return
 	}
 
 	var buf bytes.Buffer
+	data := struct{ Posts []Post }{Posts: posts}
 	if err := b.index.Execute(&buf, data); err != nil {
 		log.Printf("error: Couldn't generate HTML: %s", err)
 		http.Error(w, fmt.Sprintf("Couldn't generate HTML"), http.StatusInternalServerError)
