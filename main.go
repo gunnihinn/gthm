@@ -90,10 +90,11 @@ func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
 	return posts, nil
 }
 
-func readTemplate(filename string, name string) (*template.Template, error) {
-	blob, err := os.ReadFile(filename)
+func readTemplate(assets string, filename string, name string) (*template.Template, error) {
+	fn := path.Join(assets, filename)
+	blob, err := os.ReadFile(fn)
 	if err != nil {
-		return nil, fmt.Errorf("error: Couldn't read %s: %s", filename, err)
+		return nil, fmt.Errorf("error: Couldn't read %s: %s", fn, err)
 	}
 	tmpl, err := template.New(name).Parse(string(blob))
 	if err != nil {
@@ -103,21 +104,21 @@ func readTemplate(filename string, name string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func newBlog(database string) (*blog, error) {
+func newBlog(assets string, database string) (*blog, error) {
 	blog := &blog{}
 	var err error
 
-	blog.index, err = readTemplate("index.html", "index")
+	blog.index, err = readTemplate(assets, "index.html", "index")
 	if err != nil {
 		return blog, err
 	}
 
-	blog.post, err = readTemplate("post.html", "post")
+	blog.post, err = readTemplate(assets, "post.html", "post")
 	if err != nil {
 		return blog, err
 	}
 
-	blog.notFound, err = readTemplate("404.html", "notFound")
+	blog.notFound, err = readTemplate(assets, "404.html", "notFound")
 	if err != nil {
 		return blog, err
 	}
@@ -279,7 +280,7 @@ func main() {
 	}
 	flag.Parse()
 
-	blog, err := newBlog(*flags.database)
+	blog, err := newBlog(*flags.assets, *flags.database)
 	if err != nil {
 		log.Fatalf("error: Couldn't create blog: %s", err)
 	}

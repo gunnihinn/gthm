@@ -9,6 +9,8 @@
         - nginx
         - certbot
         - python3-certbot-nginx
+        - golang
+        - make
 
     - name: Define gthm.is
       copy:
@@ -42,7 +44,7 @@
 
     - name: Copy gthm assets
       copy:
-        src: {{ item }}
+        src: "{{ item }}"
         dest: /var/gthm/
       with_items:
         - index.html
