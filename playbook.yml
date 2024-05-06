@@ -1,0 +1,58 @@
+- hosts: all
+  tasks:
+    - name: Update apt cache and install nginx and certbot
+      apt:
+        name: "{{ item }}"
+        update_cache: yes
+        state: latest
+      loop:
+        - nginx
+        - certbot
+        - python3-certbot-nginx
+
+    - name: Define gthm.is
+      copy:
+        src: gthm.is/nginx.conf
+        dest: /etc/nginx/sites-available/gthm.is
+
+    - name: Enable gthm.is
+      file:
+        src: /etc/nginx/sites-available/gthm.is
+        dest: /etc/nginx/sites-enabled/gthm.is
+        state: link
+      notify: Restart nginx
+
+    - name: Add gthm service 
+      copy:
+        src: gthm.is/gthm.service
+        dest: /etc/systemd/system/gthm.service
+      notify: Restart gthm
+
+    - name: Add gthm service configuration
+      copy:
+        src: gthm.is/gthm.env
+        dest: /etc/gthm.env
+      notify: Restart gthm
+
+    - name: Create gthm data directory
+      ansible.builtin.file:
+        path: /var/gthm
+        state: directory
+        mode: '0755'
+
+    - name: Start gthm service
+      systemd:
+        name: gthm
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+
+    - name: Restart gthm
+      service:
+        name: gthm
+        state: restarted

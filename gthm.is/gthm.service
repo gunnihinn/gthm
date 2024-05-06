@@ -1,0 +1,11 @@
+[Unit]
+Description=gthm
+
+[Service]
+EnvironmentFile=/etc/gthm.env
+ExecStart=/usr/bin/gthm -database /var/gthm/blog.db
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

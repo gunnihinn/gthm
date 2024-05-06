@@ -8,4 +8,3 @@ Nginx can handle that.
 
 * TLS certificate for gthm.is
 * Nginx config
-* Microblog

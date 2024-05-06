@@ -1,0 +1,1 @@
+gthm.is ansible_connection=ssh  ansible_user=root
