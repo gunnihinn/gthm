@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"html/template"
 	"log"
@@ -44,6 +45,13 @@ func (b blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flags := struct {
+		port *int
+	}{
+		port: flag.Int("port", 8000, "port to serve blog on"),
+	}
+	flag.Parse()
+
 	blog, err := newBlog("index.html")
 	if err != nil {
 		log.Fatalf("error: Couldn't create blog: %s", err)
@@ -52,5 +60,6 @@ func main() {
 	http.Handle("/", blog)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	log.Fatal(http.ListenAndServe(":8000", nil))
+	log.Printf("serving blog: port=%d", *flags.port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *flags.port), nil))
 }
