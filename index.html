@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="static/style.css">
-    <link rel="icon" href="static/favicon.svg">
+    <link rel="icon" type="image/svg" href="static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sedan+SC&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
         {{ range .Posts }}
         <article>
             <div class="post-title">
-                <h2>#{{ .Id }} {{ .Title }}</h2>
+                <h2><a href="./{{ .Id }}">#{{ .Id }}</a> | {{ .Title }}</h2>
                 <h3>{{ .Date }}</h3>
             </div>
 
