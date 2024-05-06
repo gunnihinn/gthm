@@ -10,7 +10,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,8 +19,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed schema.sql
-var schema string
+var (
+	//go:embed index.html
+	index string
+	//go:embed post.html
+	post string
+	//go:embed 404.html
+	notFound string
+	//go:embed schema.sql
+	schema string
+)
 
 const (
 	sqlAllPosts = "SELECT id, created, title, body FROM posts ORDER BY id DESC"
@@ -86,20 +93,16 @@ func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
 	return posts, nil
 }
 
-func readTemplate(filename string, name string) (*template.Template, error) {
-	blob, err := os.ReadFile(filename)
+func readTemplate(content string, name string) (*template.Template, error) {
+	tmpl, err := template.New(name).Parse(content)
 	if err != nil {
-		return nil, fmt.Errorf("error: Couldn't read %s: %s", filename, err)
-	}
-	tmpl, err := template.New(name).Parse(string(blob))
-	if err != nil {
-		return nil, fmt.Errorf("error: Couldn't parse %s template: %s", filename, err)
+		return nil, fmt.Errorf("error: Couldn't parse template %s: %s", name, err)
 	}
 
 	return tmpl, nil
 }
 
-func newBlog(index string, post string, notFound string, database string) (*blog, error) {
+func newBlog(database string) (*blog, error) {
 	blog := &blog{}
 	var err error
 
@@ -271,7 +274,7 @@ func main() {
 	}
 	flag.Parse()
 
-	blog, err := newBlog("index.html", "post.html", "404.html", *flags.database)
+	blog, err := newBlog(*flags.database)
 	if err != nil {
 		log.Fatalf("error: Couldn't create blog: %s", err)
 	}
