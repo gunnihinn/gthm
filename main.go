@@ -276,7 +276,7 @@ func main() {
 		port:     flag.Int("port", 8000, "port to serve blog on"),
 		database: flag.String("database", ":memory:", "database to store posts in"),
 		address:  flag.String("address", "https://www.gthm.is", "public address of blog"),
-		assets:   flag.String("assets", ".", "root directory of assets"),
+		assets:   flag.String("assets", "assets", "root directory of assets"),
 	}
 	flag.Parse()
 
