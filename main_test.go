@@ -40,5 +40,18 @@ func TestGetIds(t *testing.T) {
 			}
 		}
 	}
+}
 
+func TestReadTemplate(t *testing.T) {
+	names := []string{"index.html", "post.html", "404.html"}
+	for _, name := range names {
+		tmpl, err := readTemplate("assets", name, name)
+		if err != nil {
+			t.Errorf("expected no error, got %s", err)
+		}
+
+		if tmpl == nil {
+			t.Errorf("expected non-nil template")
+		}
+	}
 }
