@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -150,23 +151,30 @@ func (b *blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+func getIds(u *url.URL) ([]int, error) {
+	var ids []int
+	if reRoot.MatchString(u.Path) {
+		return ids, nil
+	} else if strId := reId.FindStringSubmatch(u.Path); len(strId) == 2 {
+		id, err := strconv.Atoi(strId[1])
+		if err != nil {
+			return nil, fmt.Errorf("Couldn't parse integer from %s: %s", strId[1], err)
+		}
+		ids = append(ids, id)
+	} else {
+		return nil, fmt.Errorf("Unknown URL %s", u)
+	}
+
+	return ids, nil
+}
+
 func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 
-	var ids []int
-	if reRoot.MatchString(r.URL.Path) {
-		// do nothing
-	} else if strId := reId.FindStringSubmatch(r.URL.Path); len(strId) == 2 {
-		id, err := strconv.Atoi(strId[1])
-		if err != nil {
-			log.Printf("error: Couldn't parse integer from %s: %s", strId[1], err)
-			b.handleNotFound(w, r)
-			return
-		}
-		ids = append(ids, id)
-	} else {
-		log.Printf("error: Unknown URL %s", r.URL)
+	ids, err := getIds(r.URL)
+	if err != nil {
+		log.Printf("error: %s", err)
 		b.handleNotFound(w, r)
 		return
 	}
