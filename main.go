@@ -75,17 +75,15 @@ func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
 
 	posts := make([]Post, 0)
 	for rows.Next() {
-		var post Post
-		var timestamp int64
-		var body string
-		if err := rows.Scan(&post.Id, &timestamp, &post.Title, &body); err != nil {
-			return nil, fmt.Errorf("Couldn't get post data from database: %s", err)
-		}
-		post.Created = time.Unix(timestamp, 0)
-		for _, paragraph := range strings.Split(body, "\n\n") {
-			post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
+		post, err := NewPostFromSQL(rows)
+		if err != nil {
+			return nil, err
 		}
 		posts = append(posts, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("Couldn't read posts from database: %s", err)
 	}
 
 	return posts, nil
@@ -279,6 +277,21 @@ type Post struct {
 
 func (p Post) Date() string {
 	return p.Created.Format("2/1/2006")
+}
+
+func NewPostFromSQL(rows *sql.Rows) (Post, error) {
+	var post Post
+	var timestamp int64
+	var body string
+	if err := rows.Scan(&post.Id, &timestamp, &post.Title, &body); err != nil {
+		return post, fmt.Errorf("Couldn't get post data from database row: %s", err)
+	}
+	post.Created = time.Unix(timestamp, 0)
+	for _, paragraph := range strings.Split(body, "\n\n") {
+		post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
+	}
+
+	return post, nil
 }
 
 func main() {
