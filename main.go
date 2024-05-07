@@ -69,7 +69,7 @@ func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
 	}(ids)
 	if err != nil {
 
-		return nil, fmt.Errorf("error: Couldn't get posts from database: %s", err)
+		return nil, fmt.Errorf("Couldn't get posts from database: %s", err)
 	}
 	defer rows.Close()
 
@@ -79,7 +79,7 @@ func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
 		var timestamp int64
 		var body string
 		if err := rows.Scan(&post.Id, &timestamp, &post.Title, &body); err != nil {
-			return nil, fmt.Errorf("error: Couldn't get post data from database: %s", err)
+			return nil, fmt.Errorf("Couldn't get post data from database: %s", err)
 		}
 		post.Created = time.Unix(timestamp, 0)
 		for _, paragraph := range strings.Split(body, "\n\n") {
@@ -181,7 +181,7 @@ func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	posts, err := b.getPosts(ctx, ids)
 	if err != nil {
-		log.Print(err)
+		log.Printf("error: %s", err)
 		http.Error(w, "Couldn't read posts", http.StatusInternalServerError)
 		return
 	}
