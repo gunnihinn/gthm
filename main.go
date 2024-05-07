@@ -186,9 +186,9 @@ func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var buf bytes.Buffer
+	buf := new(bytes.Buffer)
 	data := struct{ Posts []Post }{Posts: posts}
-	if err := b.index.Execute(&buf, data); err != nil {
+	if err := b.index.Execute(buf, data); err != nil {
 		log.Printf("error: Couldn't generate HTML: %s", err)
 		http.Error(w, fmt.Sprintf("Couldn't generate HTML"), http.StatusInternalServerError)
 		return
@@ -199,6 +199,22 @@ func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Couldn't write HTML"), http.StatusInternalServerError)
 		return
 	}
+}
+
+func parsePost(form map[string][]string) (string, string, error) {
+	titles, ok := form["title"]
+	if !ok {
+		return "", "", fmt.Errorf("No title in form")
+	}
+	title := strings.TrimSpace(strings.Join(titles, " "))
+
+	bodies, ok := form["body"]
+	if !ok || len(bodies) == 0 {
+		return "", "", fmt.Errorf("No body in form")
+	}
+	body := strings.TrimSpace(strings.ReplaceAll(strings.Join(bodies, "\n\n"), "\r\n", "\n"))
+
+	return title, body, nil
 }
 
 func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
@@ -212,21 +228,12 @@ func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		titles, ok := r.Form["title"]
-		if !ok {
-			log.Printf("error: No title in form")
-			http.Error(w, fmt.Sprintf("No title in form"), http.StatusInternalServerError)
+		title, body, err := parsePost(r.Form)
+		if err != nil {
+			log.Printf("error: %s", err)
+			http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)
 			return
 		}
-		title := strings.TrimSpace(strings.Join(titles, " "))
-
-		bodies, ok := r.Form["body"]
-		if !ok || len(bodies) == 0 {
-			log.Printf("error: No body in form")
-			http.Error(w, fmt.Sprintf("No body in form"), http.StatusInternalServerError)
-			return
-		}
-		body := strings.TrimSpace(strings.ReplaceAll(strings.Join(bodies, "\n\n"), "\r\n", "\n"))
 
 		if err := b.addPost(ctx, title, body); err != nil {
 			log.Print(err)

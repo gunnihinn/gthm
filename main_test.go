@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -46,6 +47,7 @@ func TestGetIds(t *testing.T) {
 
 func TestReadTemplate(t *testing.T) {
 	names := []string{"index.html", "post.html", "404.html"}
+	data := struct{ Posts []Post }{Posts: []Post{}}
 	for _, name := range names {
 		tmpl, err := readTemplate("assets", name, name)
 		if err != nil {
@@ -54,6 +56,11 @@ func TestReadTemplate(t *testing.T) {
 
 		if tmpl == nil {
 			t.Errorf("expected non-nil template")
+		}
+
+		buf := new(bytes.Buffer)
+		if err := tmpl.Execute(buf, data); err != nil {
+			t.Errorf("expected no error, got %s", err)
 		}
 	}
 }
@@ -100,5 +107,32 @@ func TestBlog(t *testing.T) {
 	}
 	if posts[0].Title != "2" {
 		t.Errorf("expected post titled 2, got %s", posts[0].Title)
+	}
+}
+
+func TestParsePost(t *testing.T) {
+	form := make(map[string][]string)
+
+	if _, _, err := parsePost(form); err == nil {
+		t.Errorf("expected error")
+	}
+
+	form["title"] = []string{"title"}
+	if _, _, err := parsePost(form); err == nil {
+		t.Errorf("expected error")
+	}
+
+	form["body"] = []string{"body\r\nbody"}
+	title, body, err := parsePost(form)
+	if err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	if title != "title" {
+		t.Errorf("expected title, got %s", title)
+	}
+
+	if body != "body\nbody" {
+		t.Errorf("expected body<nl>body, got\n%s", body)
 	}
 }
