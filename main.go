@@ -201,7 +201,7 @@ func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func parsePost(form map[string][]string) (string, string, error) {
+func parseForm(form map[string][]string) (string, string, error) {
 	titles, ok := form["title"]
 	if !ok {
 		return "", "", fmt.Errorf("No title in form")
@@ -228,7 +228,7 @@ func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		title, body, err := parsePost(r.Form)
+		title, body, err := parseForm(r.Form)
 		if err != nil {
 			log.Printf("error: %s", err)
 			http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)

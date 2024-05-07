@@ -113,17 +113,17 @@ func TestBlog(t *testing.T) {
 func TestParsePost(t *testing.T) {
 	form := make(map[string][]string)
 
-	if _, _, err := parsePost(form); err == nil {
+	if _, _, err := parseForm(form); err == nil {
 		t.Errorf("expected error")
 	}
 
 	form["title"] = []string{"title"}
-	if _, _, err := parsePost(form); err == nil {
+	if _, _, err := parseForm(form); err == nil {
 		t.Errorf("expected error")
 	}
 
 	form["body"] = []string{"body\r\nbody"}
-	title, body, err := parsePost(form)
+	title, body, err := parseForm(form)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
