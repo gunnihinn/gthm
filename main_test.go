@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestGetIds(t *testing.T) {
@@ -53,5 +55,50 @@ func TestReadTemplate(t *testing.T) {
 		if tmpl == nil {
 			t.Errorf("expected non-nil template")
 		}
+	}
+}
+
+func TestBlog(t *testing.T) {
+	blog, err := newBlog("assets", ":memory:")
+	if err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	posts, err := blog.getPosts(ctx, nil)
+	if err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+	if len(posts) > 0 {
+		t.Errorf("expected no posts, got %d", len(posts))
+	}
+
+	if err := blog.addPost(ctx, "1", "body"); err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	if err := blog.addPost(ctx, "2", "body"); err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	posts, err = blog.getPosts(ctx, nil)
+	if err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+	if len(posts) != 2 {
+		t.Errorf("expected 2 posts, got %d", len(posts))
+	}
+
+	posts, err = blog.getPosts(ctx, []int{2})
+	if err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+	if len(posts) != 1 {
+		t.Errorf("expected 1 post, got %d", len(posts))
+	}
+	if posts[0].Title != "2" {
+		t.Errorf("expected post titled 2, got %s", posts[0].Title)
 	}
 }
