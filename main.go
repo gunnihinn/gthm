@@ -123,7 +123,7 @@ func newBlog(assets string, database string) (*blog, error) {
 		return blog, err
 	}
 
-	blog.db, err = sql.Open("sqlite3", database)
+	blog.db, err = sql.Open("sqlite3", fmt.Sprintf("%s?_busy_timeout=500&_journal_mode=WAL", database))
 	if err != nil {
 		return blog, fmt.Errorf("error: Couldn't open database %s: %s", database, err)
 	}
