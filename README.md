@@ -20,6 +20,11 @@ There is very little configuration available because I wrote this for me.
 The posts are stored in a Sqlite database.
 I recommend using Litestream to backup the database. 
 
+## Deploy
+
+SSH to the host, build the `gthm` binary there and copy it to `/usr/bin`.
+Then run `setup.sh` to copy any assets.
+
 ## Can I use this?
 
 Sure.
