@@ -66,7 +66,7 @@ func TestReadTemplate(t *testing.T) {
 }
 
 func TestBlog(t *testing.T) {
-	blog, err := newBlog("assets", ":memory:")
+	blog, err := newBlog("none", "assets", ":memory:")
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
