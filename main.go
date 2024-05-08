@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -43,6 +44,7 @@ type blog struct {
 	index    *template.Template
 	post     *template.Template
 	notFound *template.Template
+	atom     *template.Template
 	db       *sql.DB
 }
 
@@ -103,8 +105,8 @@ func readTemplate(assets string, filename string, name string) (*template.Templa
 	return tmpl, nil
 }
 
-func newBlog(assets string, database string) (*blog, error) {
-	blog := &blog{}
+func newBlog(address string, assets string, database string) (*blog, error) {
+	blog := &blog{address: address}
 	var err error
 
 	blog.index, err = readTemplate(assets, "index.html", "index")
@@ -122,6 +124,11 @@ func newBlog(assets string, database string) (*blog, error) {
 		return blog, err
 	}
 
+	blog.atom, err = readTemplate(assets, "feed.xml", "feed")
+	if err != nil {
+		return blog, err
+	}
+
 	blog.db, err = sql.Open("sqlite3", fmt.Sprintf("%s?_busy_timeout=500&_journal_mode=WAL", database))
 	if err != nil {
 		return blog, fmt.Errorf("error: Couldn't open database %s: %s", database, err)
@@ -135,16 +142,9 @@ func newBlog(assets string, database string) (*blog, error) {
 }
 
 func (b *blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
-	var buf bytes.Buffer
-	if err := b.notFound.Execute(&buf, nil); err != nil {
-		log.Printf("error: Couldn't generate HTML: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't generate HTML"), http.StatusInternalServerError)
-		return
-	}
-
-	if _, err := buf.WriteTo(w); err != nil {
-		log.Printf("error: Couldn't write HTML: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write HTML"), http.StatusNotFound)
+	if err := writeTemplate(w, b.notFound, nil); err != nil {
+		log.Printf("error: %s", err)
+		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
 		return
 	}
 }
@@ -184,17 +184,10 @@ func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	buf := new(bytes.Buffer)
 	data := struct{ Posts []Post }{Posts: posts}
-	if err := b.index.Execute(buf, data); err != nil {
-		log.Printf("error: Couldn't generate HTML: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't generate HTML"), http.StatusInternalServerError)
-		return
-	}
-
-	if _, err := buf.WriteTo(w); err != nil {
-		log.Printf("error: Couldn't write HTML: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write HTML"), http.StatusInternalServerError)
+	if err := writeTemplate(w, b.index, data); err != nil {
+		log.Printf("error: %s", err)
+		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
 		return
 	}
 }
@@ -243,19 +236,86 @@ func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var buf bytes.Buffer
-	if err := b.post.Execute(&buf, nil); err != nil {
-		log.Printf("error: Couldn't generate HTML: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't generate HTML"), http.StatusInternalServerError)
+	if err := writeTemplate(w, b.post, nil); err != nil {
+		log.Printf("error: %s", err)
+		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
 		return
+	}
+}
+
+func writeTemplate(w io.Writer, tmpl *template.Template, data any) error {
+	buf := new(bytes.Buffer)
+	if err := tmpl.Execute(buf, data); err != nil {
+		return fmt.Errorf("Couldn't execute template: %s", err)
 	}
 
 	if _, err := buf.WriteTo(w); err != nil {
-		log.Printf("error: Couldn't write HTML: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write HTML"), http.StatusInternalServerError)
+		return fmt.Errorf("Couldn't write template: %s", err)
+	}
+
+	return nil
+}
+
+type Feed struct {
+	Header  template.HTML
+	URL     string
+	ID      string
+	Entries []Entry
+	updated time.Time
+}
+
+func (f Feed) Updated() string {
+	return f.updated.Format(time.RFC3339)
+}
+
+type Entry struct {
+	Title   string
+	ID      string
+	URL     string
+	updated time.Time
+}
+
+func (e Entry) Updated() string {
+	return e.updated.Format(time.RFC3339)
+}
+
+func (b *blog) handleFeed(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	var ids []int
+	posts, err := b.getPosts(ctx, ids)
+	if err != nil {
+		log.Printf("error: %s", err)
+		http.Error(w, "Couldn't read posts", http.StatusInternalServerError)
 		return
 	}
 
+	feed := Feed{
+		ID:     b.address,
+		URL:    fmt.Sprintf("%s/feed", b.address),
+		Header: template.HTML(`<?xml version="1.0" encoding="utf-8"?>`),
+	}
+	if len(posts) > 0 {
+		feed.updated = posts[0].Created
+	} else {
+		feed.updated = time.Now()
+	}
+	for _, post := range posts {
+		e := Entry{
+			Title:   post.Title,
+			ID:      fmt.Sprintf("%s/%d", b.address, post.Id),
+			URL:     fmt.Sprintf("%s/%d", b.address, post.Id),
+			updated: post.Created,
+		}
+		feed.Entries = append(feed.Entries, e)
+	}
+
+	if err := writeTemplate(w, b.atom, feed); err != nil {
+		log.Printf("error: %s", err)
+		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (b *blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -263,6 +323,8 @@ func (b *blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path == "/new" {
 		b.handleWrite(w, r)
+	} else if r.URL.Path == "/feed" || r.URL.Path == "/feed/" {
+		b.handleFeed(w, r)
 	} else {
 		b.handleIndex(w, r)
 	}
@@ -308,7 +370,7 @@ func main() {
 	}
 	flag.Parse()
 
-	blog, err := newBlog(*flags.assets, *flags.database)
+	blog, err := newBlog(*flags.address, *flags.assets, *flags.database)
 	if err != nil {
 		log.Fatalf("error: Couldn't create blog: %s", err)
 	}

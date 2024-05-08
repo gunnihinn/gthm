@@ -1,0 +1,18 @@
+{{ .Header }}
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <title>gthm</title>
+    <link href="{{ .URL }}" rel="self"/>
+    <updated>{{ .Updated }}</updated>
+    <author>
+        <name>Gunnar Þór Magnússon</name>
+    </author>
+    <id>{{ .ID }}</id>
+    {{ range .Entries }}
+    <entry>
+        <title>{{ .Title }}</title>
+        <link href="{{ .URL }}" rel="alternate"/>
+        <id>{{ .ID }}</id>
+        <updated>{{ .Updated }}</updated>
+    </entry>
+    {{ end }}
+</feed>
