@@ -11,6 +11,6 @@
       let pkgs = import nixpkgs { inherit system; };
       in {
         devShell =
-          pkgs.mkShell { buildInputs = with pkgs; [ ansible go gopls ]; };
+          pkgs.mkShell { buildInputs = with pkgs; [ ansible go gopls sqlc ]; };
       });
 }

@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
-	"database/sql"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -11,85 +9,20 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
-	"regexp"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	"gthm/db"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
 	//go:embed schema.sql
-	schema string
+	sqlSchema string
 )
-
-const (
-	sqlAllPosts = "SELECT id, created, title, body FROM posts ORDER BY id DESC"
-	sqlOnePost  = "SELECT id, created, title, body FROM posts WHERE id = ?"
-)
-
-var (
-	reRoot = regexp.MustCompile(`^/$`)
-	reId   = regexp.MustCompile(`^/([0-9]+)/?$`)
-)
-
-type blog struct {
-	sync.Mutex
-	address  string
-	index    *template.Template
-	post     *template.Template
-	notFound *template.Template
-	atom     *template.Template
-	db       *sql.DB
-}
-
-func (b *blog) addPost(ctx context.Context, title string, body string) error {
-	b.Lock()
-	defer b.Unlock()
-	if _, err := b.db.ExecContext(ctx, "INSERT INTO posts(title, body) VALUES(?, ?)", title, body); err != nil {
-		return fmt.Errorf("error: Couldn't insert new post: %s", err)
-	}
-
-	return nil
-}
-
-func (b *blog) getPosts(ctx context.Context, ids []int) ([]Post, error) {
-	b.Lock()
-	defer b.Unlock()
-
-	rows, err := func(ids []int) (*sql.Rows, error) {
-		if len(ids) > 0 {
-			return b.db.QueryContext(ctx, sqlOnePost, ids[0])
-		} else {
-			return b.db.QueryContext(ctx, sqlAllPosts)
-		}
-	}(ids)
-	if err != nil {
-
-		return nil, fmt.Errorf("Couldn't get posts from database: %s", err)
-	}
-	defer rows.Close()
-
-	posts := make([]Post, 0)
-	for rows.Next() {
-		post, err := NewPostFromSQL(rows)
-		if err != nil {
-			return nil, err
-		}
-		posts = append(posts, post)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Couldn't read posts from database: %s", err)
-	}
-
-	return posts, nil
-}
 
 func readTemplate(assets string, filename string, name string) (*template.Template, error) {
 	fn := path.Join(assets, filename)
@@ -103,93 +36,6 @@ func readTemplate(assets string, filename string, name string) (*template.Templa
 	}
 
 	return tmpl, nil
-}
-
-func newBlog(address string, assets string, database string) (*blog, error) {
-	blog := &blog{address: address}
-	var err error
-
-	blog.index, err = readTemplate(assets, "index.html", "index")
-	if err != nil {
-		return blog, err
-	}
-
-	blog.post, err = readTemplate(assets, "post.html", "post")
-	if err != nil {
-		return blog, err
-	}
-
-	blog.notFound, err = readTemplate(assets, "404.html", "notFound")
-	if err != nil {
-		return blog, err
-	}
-
-	blog.atom, err = readTemplate(assets, "feed.xml", "feed")
-	if err != nil {
-		return blog, err
-	}
-
-	blog.db, err = sql.Open("sqlite3", fmt.Sprintf("%s?_busy_timeout=500&_journal_mode=WAL", database))
-	if err != nil {
-		return blog, fmt.Errorf("error: Couldn't open database %s: %s", database, err)
-	}
-
-	if _, err := blog.db.Exec(schema); err != nil {
-		return blog, fmt.Errorf("error: Couldn't initialize database schemas: %s", err)
-	}
-
-	return blog, nil
-}
-
-func (b *blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
-	if err := writeTemplate(w, b.notFound, nil); err != nil {
-		log.Printf("error: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
-		return
-	}
-}
-
-func getIds(u *url.URL) ([]int, error) {
-	var ids []int
-	if reRoot.MatchString(u.Path) {
-		return ids, nil
-	} else if strId := reId.FindStringSubmatch(u.Path); len(strId) == 2 {
-		id, err := strconv.Atoi(strId[1])
-		if err != nil {
-			return nil, fmt.Errorf("Couldn't parse integer from %s: %s", strId[1], err)
-		}
-		ids = append(ids, id)
-	} else {
-		return nil, fmt.Errorf("Unknown URL %s", u)
-	}
-
-	return ids, nil
-}
-
-func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
-	ids, err := getIds(r.URL)
-	if err != nil {
-		log.Printf("error: %s", err)
-		b.handleNotFound(w, r)
-		return
-	}
-
-	posts, err := b.getPosts(ctx, ids)
-	if err != nil {
-		log.Printf("error: %s", err)
-		http.Error(w, "Couldn't read posts", http.StatusInternalServerError)
-		return
-	}
-
-	data := struct{ Posts []Post }{Posts: posts}
-	if err := writeTemplate(w, b.index, data); err != nil {
-		log.Printf("error: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
-		return
-	}
 }
 
 func parseForm(form map[string][]string) (string, string, error) {
@@ -206,41 +52,6 @@ func parseForm(form map[string][]string) (string, string, error) {
 	body := strings.TrimSpace(strings.ReplaceAll(strings.Join(bodies, "\n\n"), "\r\n", "\n"))
 
 	return title, body, nil
-}
-
-func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
-	if r.Method == "POST" {
-		if err := r.ParseForm(); err != nil {
-			log.Printf("error: Couldn't parse HTML form: %s", err)
-			http.Error(w, fmt.Sprintf("Couldn't parse HTML form: %s", err), http.StatusInternalServerError)
-			return
-		}
-
-		title, body, err := parseForm(r.Form)
-		if err != nil {
-			log.Printf("error: %s", err)
-			http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)
-			return
-		}
-
-		if err := b.addPost(ctx, title, body); err != nil {
-			log.Print(err)
-			http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)
-			return
-		}
-
-		http.Redirect(w, r, b.address, http.StatusSeeOther)
-		return
-	}
-
-	if err := writeTemplate(w, b.post, nil); err != nil {
-		log.Printf("error: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
-		return
-	}
 }
 
 func writeTemplate(w io.Writer, tmpl *template.Template, data any) error {
@@ -279,59 +90,8 @@ func (e Entry) Updated() string {
 	return e.updated.Format(time.RFC3339)
 }
 
-func (b *blog) handleFeed(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-	defer cancel()
-
-	var ids []int
-	posts, err := b.getPosts(ctx, ids)
-	if err != nil {
-		log.Printf("error: %s", err)
-		http.Error(w, "Couldn't read posts", http.StatusInternalServerError)
-		return
-	}
-
-	feed := Feed{
-		ID:     b.address,
-		URL:    fmt.Sprintf("%s/feed", b.address),
-		Header: template.HTML(`<?xml version="1.0" encoding="utf-8"?>`),
-	}
-	if len(posts) > 0 {
-		feed.updated = posts[0].Created
-	} else {
-		feed.updated = time.Now()
-	}
-	for _, post := range posts {
-		e := Entry{
-			Title:   post.Title,
-			ID:      fmt.Sprintf("%s/%d", b.address, post.Id),
-			URL:     fmt.Sprintf("%s/%d", b.address, post.Id),
-			updated: post.Created,
-		}
-		feed.Entries = append(feed.Entries, e)
-	}
-
-	if err := writeTemplate(w, b.atom, feed); err != nil {
-		log.Printf("error: %s", err)
-		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
-		return
-	}
-}
-
-func (b *blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Printf("request: url=%s", r.URL)
-
-	if r.URL.Path == "/new" {
-		b.handleWrite(w, r)
-	} else if r.URL.Path == "/feed" || r.URL.Path == "/feed/" {
-		b.handleFeed(w, r)
-	} else {
-		b.handleIndex(w, r)
-	}
-}
-
 type Post struct {
-	Id         int
+	Id         int64
 	Created    time.Time
 	Title      string
 	Paragraphs []string
@@ -341,19 +101,18 @@ func (p Post) Date() string {
 	return p.Created.Format("2/1/2006")
 }
 
-func NewPostFromSQL(rows *sql.Rows) (Post, error) {
-	var post Post
-	var timestamp int64
-	var body string
-	if err := rows.Scan(&post.Id, &timestamp, &post.Title, &body); err != nil {
-		return post, fmt.Errorf("Couldn't get post data from database row: %s", err)
+func FromDbPost(p db.Post) Post {
+	post := Post{
+		Id:      p.ID,
+		Created: time.Unix(p.Created, 0),
+		Title:   p.Title,
 	}
-	post.Created = time.Unix(timestamp, 0)
-	for _, paragraph := range strings.Split(body, "\n\n") {
+
+	for _, paragraph := range strings.Split(p.Body, "\n\n") {
 		post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
 	}
 
-	return post, nil
+	return post
 }
 
 func main() {

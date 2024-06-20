@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
+	"gthm/db"
 	"testing"
 	"time"
 )
@@ -12,35 +12,29 @@ import (
 func TestGetIds(t *testing.T) {
 	type setup struct {
 		path   string
-		expIds []int
+		expID  int
 		expErr error
 	}
 	setups := []setup{
-		{path: "/"},
-		{path: "/1", expIds: []int{1}},
-		{path: "/100", expIds: []int{100}},
+		{path: "/", expErr: fmt.Errorf("Expected post ID")},
+		{path: "/1", expID: 1},
+		{path: "/100", expID: 100},
 		{path: "/1000000000000000000000000000000000000000000", expErr: fmt.Errorf("strconv.Atoi error")},
 		{path: "/foo", expErr: fmt.Errorf("Some error")},
 	}
 
 	for _, s := range setups {
-		u := &url.URL{Path: s.path}
-
-		ids, err := getIds(u)
-		if err != nil && s.expErr == nil {
-			t.Errorf("expected no error, got %s", err)
-		} else if err == nil && s.expErr != nil {
-			t.Errorf("expected error %s, got nothing", s.expErr)
+		id, err := getID(s.path)
+		if err != nil && s.expErr == nil || err == nil && s.expErr != nil {
+			t.Errorf("error mismatch: got '%v', expected '%v'", err, s.expErr)
 		}
 
-		if len(ids) != len(s.expIds) {
-			t.Errorf("expected %d IDs, got %d IDs", len(s.expIds), len(ids))
+		if err != nil {
+			continue
 		}
 
-		for i, id := range ids {
-			if s.expIds[i] != id {
-				t.Errorf("expected %d, got %d", s.expIds[i], id)
-			}
+		if s.expID != id {
+			t.Errorf("ID mismatch: expected %d, got %d", s.expID, id)
 		}
 	}
 }
@@ -74,7 +68,9 @@ func TestBlog(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	posts, err := blog.getPosts(ctx, nil)
+	query := db.New(blog.db)
+
+	posts, err := query.ListPosts(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
@@ -90,7 +86,7 @@ func TestBlog(t *testing.T) {
 		t.Errorf("expected no error, got %s", err)
 	}
 
-	posts, err = blog.getPosts(ctx, nil)
+	posts, err = query.ListPosts(ctx)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
@@ -98,14 +94,11 @@ func TestBlog(t *testing.T) {
 		t.Errorf("expected 2 posts, got %d", len(posts))
 	}
 
-	posts, err = blog.getPosts(ctx, []int{2})
+	post, err := query.GetPost(ctx, 2)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
-	if len(posts) != 1 {
-		t.Errorf("expected 1 post, got %d", len(posts))
-	}
-	if posts[0].Title != "2" {
+	if post.Title != "2" {
 		t.Errorf("expected post titled 2, got %s", posts[0].Title)
 	}
 }
