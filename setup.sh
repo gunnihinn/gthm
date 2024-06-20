@@ -2,4 +2,4 @@
 
 set -euo pipefail
 
-ansible-playbook -i hosts playbook.yml
+ansible-playbook -i devops/hosts devops/playbook.yml
