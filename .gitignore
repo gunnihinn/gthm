@@ -3,3 +3,4 @@
 gthm
 .env
 db/
+pkg/blog/schema.sql

@@ -1,10 +1,13 @@
 BIN := /usr/bin/gthm
 
-gthm: main.go schema.sql db/db.go check
+gthm: main.go schema.sql pkg/db/db.go check
 	CGO_ENABLED=1 go build
 
-db/db.go: schema.sql query.sql sqlc.yaml
+pkg/db/db.go: schema.sql query.sql sqlc.yaml
 	sqlc generate
+
+pkg/blog/schema.sql: schema.sql
+	cp $< $@
 
 $(BIN): gthm
 	install $< $@
@@ -12,9 +15,9 @@ $(BIN): gthm
 install: $(BIN)
 
 @PHONY: check
-check:
-	go test
+check: pkg/db/db.go pkg/blog/schema.sql
+	go test ./...
 
 @PHONY: clean
 clean:
-	rm -f gthm
+	rm -f gthm pkg/blog/schema.sql

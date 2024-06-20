@@ -1,26 +1,62 @@
-package main
+package blog
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
-	"gthm/db"
+	"gthm/pkg/atom"
+	"gthm/pkg/db"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
 	reRoot = regexp.MustCompile(`^/$`)
 	reId   = regexp.MustCompile(`^/([0-9]+)/?$`)
+	//go:embed schema.sql
+	sqlSchema string
 )
 
-type blog struct {
+type Post struct {
+	Id         int64
+	Created    time.Time
+	Title      string
+	Paragraphs []string
+}
+
+func (p Post) Date() string {
+	return p.Created.Format("2/1/2006")
+}
+
+func FromDbPost(p db.Post) Post {
+	post := Post{
+		Id:      p.ID,
+		Created: time.Unix(p.Created, 0),
+		Title:   p.Title,
+	}
+
+	for _, paragraph := range strings.Split(p.Body, "\n\n") {
+		post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
+	}
+
+	return post
+}
+
+type Blog struct {
 	sync.Mutex
 	address  string
 	index    *template.Template
@@ -30,8 +66,8 @@ type blog struct {
 	db       *sql.DB
 }
 
-func newBlog(address string, assets string, database string) (*blog, error) {
-	blog := &blog{address: address}
+func New(address string, assets string, database string) (*Blog, error) {
+	blog := &Blog{address: address}
 	var err error
 
 	blog.index, err = readTemplate(assets, "index.html", "index")
@@ -66,7 +102,7 @@ func newBlog(address string, assets string, database string) (*blog, error) {
 	return blog, nil
 }
 
-func (b *blog) addPost(ctx context.Context, title string, body string) error {
+func (b *Blog) addPost(ctx context.Context, title string, body string) error {
 	b.Lock()
 	defer b.Unlock()
 
@@ -77,45 +113,21 @@ func (b *blog) addPost(ctx context.Context, title string, body string) error {
 	return nil
 }
 
-func (b *blog) handleFeed(w http.ResponseWriter, r *http.Request) {
+func (b *Blog) handleFeed(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 
 	b.Lock()
 	defer b.Unlock()
 
-	ps, err := db.New(b.db).ListPosts(ctx)
+	posts, err := db.New(b.db).ListPosts(ctx)
 	if err != nil {
 		log.Printf("error: %s", err)
 		http.Error(w, "Couldn't read posts", http.StatusInternalServerError)
 		return
 	}
 
-	posts := make([]Post, 0, len(ps))
-	for _, p := range ps {
-		posts = append(posts, FromDbPost(p))
-	}
-
-	feed := Feed{
-		ID:     b.address,
-		URL:    fmt.Sprintf("%s/feed", b.address),
-		Header: template.HTML(`<?xml version="1.0" encoding="utf-8"?>`),
-	}
-	if len(posts) > 0 {
-		feed.updated = posts[0].Created
-	} else {
-		feed.updated = time.Now()
-	}
-	for _, post := range posts {
-		e := Entry{
-			Title:   post.Title,
-			ID:      fmt.Sprintf("%s/%d", b.address, post.Id),
-			URL:     fmt.Sprintf("%s/%d", b.address, post.Id),
-			updated: post.Created,
-		}
-		feed.Entries = append(feed.Entries, e)
-	}
-
+	feed := atom.FromPosts(posts, b.address)
 	if err := writeTemplate(w, b.atom, feed); err != nil {
 		log.Printf("error: %s", err)
 		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
@@ -123,7 +135,7 @@ func (b *blog) handleFeed(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
+func (b *Blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
 	if err := writeTemplate(w, b.notFound, nil); err != nil {
 		log.Printf("error: %s", err)
 		http.Error(w, fmt.Sprintf("Couldn't write response"), http.StatusInternalServerError)
@@ -131,7 +143,7 @@ func (b *blog) handleNotFound(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (b *blog) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (b *Blog) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 
@@ -167,7 +179,7 @@ func getID(path string) (int, error) {
 	return strconv.Atoi(strId[1])
 }
 
-func (b *blog) handleOnePost(w http.ResponseWriter, r *http.Request) {
+func (b *Blog) handleOnePost(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 
@@ -198,7 +210,7 @@ func (b *blog) handleOnePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
+func (b *Blog) handleWrite(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()
 
@@ -235,7 +247,7 @@ func (b *blog) handleWrite(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (b *Blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("request: url=%s", r.URL)
 
 	if r.URL.Path == "/new" {
@@ -249,4 +261,47 @@ func (b *blog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		b.handleNotFound(w, r)
 	}
+}
+
+func parseForm(form map[string][]string) (string, string, error) {
+	titles, ok := form["title"]
+	if !ok {
+		return "", "", fmt.Errorf("No title in form")
+	}
+	title := strings.TrimSpace(strings.Join(titles, " "))
+
+	bodies, ok := form["body"]
+	if !ok || len(bodies) == 0 {
+		return "", "", fmt.Errorf("No body in form")
+	}
+	body := strings.TrimSpace(strings.ReplaceAll(strings.Join(bodies, "\n\n"), "\r\n", "\n"))
+
+	return title, body, nil
+}
+
+func readTemplate(assets string, filename string, name string) (*template.Template, error) {
+	fn := path.Join(assets, filename)
+	blob, err := os.ReadFile(fn)
+	if err != nil {
+		return nil, fmt.Errorf("error: Couldn't read %s: %s", fn, err)
+	}
+	tmpl, err := template.New(name).Parse(string(blob))
+	if err != nil {
+		return nil, fmt.Errorf("error: Couldn't parse template %s: %s", name, err)
+	}
+
+	return tmpl, nil
+}
+
+func writeTemplate(w io.Writer, tmpl *template.Template, data any) error {
+	buf := new(bytes.Buffer)
+	if err := tmpl.Execute(buf, data); err != nil {
+		return fmt.Errorf("Couldn't execute template: %s", err)
+	}
+
+	if _, err := buf.WriteTo(w); err != nil {
+		return fmt.Errorf("Couldn't write template: %s", err)
+	}
+
+	return nil
 }

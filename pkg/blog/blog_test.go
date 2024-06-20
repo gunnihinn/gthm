@@ -1,12 +1,13 @@
-package main
+package blog
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"gthm/db"
 	"testing"
 	"time"
+
+	"gthm/pkg/db"
 )
 
 func TestGetIds(t *testing.T) {
@@ -43,7 +44,7 @@ func TestReadTemplate(t *testing.T) {
 	names := []string{"index.html", "post.html", "404.html"}
 	data := struct{ Posts []Post }{Posts: []Post{}}
 	for _, name := range names {
-		tmpl, err := readTemplate("assets", name, name)
+		tmpl, err := readTemplate("../../assets", name, name)
 		if err != nil {
 			t.Errorf("expected no error, got %s", err)
 		}
@@ -60,7 +61,7 @@ func TestReadTemplate(t *testing.T) {
 }
 
 func TestBlog(t *testing.T) {
-	blog, err := newBlog("none", "assets", ":memory:")
+	blog, err := New("none", "../../assets", ":memory:")
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
