@@ -21,3 +21,6 @@ check: pkg/db/db.go pkg/blog/schema.sql
 @PHONY: clean
 clean:
 	rm -f gthm pkg/blog/schema.sql
+
+deploy: gthm
+	ansible-playbook -i devops/hosts devops/playbook.yml
