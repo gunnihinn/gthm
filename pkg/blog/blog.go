@@ -32,22 +32,16 @@ var (
 )
 
 type Post struct {
-	Id         int64
-	Created    time.Time
-	Title      string
+	db.Post
 	Paragraphs []string
 }
 
 func (p Post) Date() string {
-	return p.Created.Format("2/1/2006")
+	return time.Unix(p.Created, 0).Format("2/1/2006")
 }
 
 func FromDbPost(p db.Post) Post {
-	post := Post{
-		Id:      p.ID,
-		Created: time.Unix(p.Created, 0),
-		Title:   p.Title,
-	}
+	post := Post{Post: p}
 
 	for _, paragraph := range strings.Split(p.Body, "\n\n") {
 		post.Paragraphs = append(post.Paragraphs, strings.TrimSpace(paragraph))
