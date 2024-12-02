@@ -1,44 +1,63 @@
 html {
-    background: #22aa88;
 }
 
 body {
-    max-width: 30em;
-    margin: auto;
-    width: 100%;
-
-    background: #fcfcfc;
-    padding-top: 1em;
-    padding-left: 2em;
-    padding-right: 2em;
+    font-family: Montserrat, Georgia, Times, Times New Roman, serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #fcfdff;
+    color: #0e111a;
+    margin: 0;
+    padding: 0;
 }
 
 header {
     font-family: "UnifrakturCook", cursive;
+    background: #000;
+    color: #fcfdff;
+}
+
+main {
+    width: 40em;
+    margin-top: 2vh;
+    margin-left: auto;
+    margin-right: auto;
+    padding-bottom: 2em;
 }
 
 .post-title {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    font-family: "Sedan SC", sans-serif;
 }
 
 h1 {
     text-align: center;
     font-size: 6em;
-    margin-top: 2vh;
-    margin-bottom: 2vh;
+    margin-top: 4vh;
+    margin-bottom: 5vh;
 }
 
 h2 {
-    padding-left: 0.5em;
-    padding-right: 1em;
-    margin-bottom: 2vh;
+    font-family: "Lobster", Georgia, Times, Times New Roman, serif;
+    font-size: 36px;
+    margin-bottom: 0;
+}
+
+h3 {
+    margin-top: 0;
+    color: #0e111a;
+    font-family: "Lato", Helvetica, Arial, sans-serif;
+    font-size: 20px;
+}
+
+a {
+    color: #0e111a;
+    text-decoration: underline #0075cf;
 }
 
 p {
-    font-family: monospace;
     font-size: 1.3em;
     margin-top: 0;
     margin-bottom: 1vh;
@@ -50,8 +69,14 @@ input, textarea {
 }
 
 footer {
-    padding-top: 1em;
-    padding-bottom: 1em;
+    background: #000;
+    color: #fcfdff;
+    padding-top: 2em;
+    padding-bottom: 2em;
+}
+
+footer a {
+    color: #36a7ff;
 }
 
 footer p {
