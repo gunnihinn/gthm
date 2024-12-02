@@ -44,7 +44,7 @@
 
     - name: Copy gthm assets
       copy:
-        src: assets/
+        src: "{{ playbook_dir }}/../assets/"
         dest: /var/gthm
       notify: Restart gthm
 
