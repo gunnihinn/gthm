@@ -30,6 +30,17 @@ main {
     main {
         width: 100%;
     }
+
+    .post-title {
+        flex-direction: column;
+    }
+
+    article {
+        padding-left: 1em;
+        padding-right: 1em;
+        text-align: left;
+        text-justify: none;
+    }
 }
 
 .post-title {
