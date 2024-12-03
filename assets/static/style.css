@@ -26,6 +26,12 @@ main {
     padding-bottom: 2em;
 }
 
+@media (max-width: 40em) {
+    main {
+        width: 100%;
+    }
+}
+
 .post-title {
     display: flex;
     justify-content: space-between;
@@ -52,6 +58,11 @@ h3 {
     font-size: 20px;
 }
 
+article {
+    text-align: justify;
+    text-justify: inter-word;
+}
+
 a {
     color: #0e111a;
     text-decoration: underline #0075cf;
@@ -65,7 +76,7 @@ p {
 }
 
 input, textarea {
-        width: 100%;
+    width: 100%;
 }
 
 footer {
